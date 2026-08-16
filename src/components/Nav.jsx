@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { IconShoppingBag, IconHeart, IconUserCircle, IconMenu, IconX } from '@tabler/icons-react'
+import { IconShoppingBag, IconHeart, IconUserCircle, IconMenu, IconX, IconLogout } from '@tabler/icons-react'
+import { supabase } from '../lib/supabase'
 import { useCart } from '../context/CartContext'
 
 const PERKS = ['Free shipping on orders over $100', 'Fresh & natural, just for you', 'Buy more, save more']
@@ -15,10 +16,18 @@ const LINKS = [
 
 export default function Nav() {
   const { count } = useCart()
+  const [session, setSession] = useState(null)
   const [open, setOpen] = useState(false)
   const location = useLocation()
 
   useEffect(() => setOpen(false), [location])
+
+  useEffect(() => {
+    let mounted = true
+    supabase?.auth.getSession().then(({ data }) => { if (mounted) setSession(data.session) })
+    const { data: sub } = supabase?.auth.onAuthStateChange((_event, s) => setSession(s)) ?? { data: null }
+    return () => { mounted = false; sub?.unsubscribe() }
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -53,7 +62,10 @@ export default function Nav() {
               {count > 0 && <span className="bag-count">{count}</span>}
             </Link>
             <button className="icon-btn" aria-label="Wishlist" title="Wishlist"><IconHeart size={20} /></button>
-            <Link to="/login" className="icon-btn" aria-label="Account" title="Account"><IconUserCircle size={22} /></Link>
+            <Link to={session ? '/account' : '/login'} className="icon-btn" aria-label="Account" title="Account"><IconUserCircle size={22} /></Link>
+            {session && (
+              <button className="icon-btn" aria-label="Sign out" title="Sign out" onClick={() => supabase.auth.signOut()}><IconLogout size={20} /></button>
+            )}
             <button
               className="burger"
               aria-label={open ? 'Close menu' : 'Open menu'}

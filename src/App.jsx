@@ -7,6 +7,7 @@ import ProductDetail from './pages/ProductDetail'
 import Checkout from './pages/Checkout'
 import Receipt from './pages/Receipt'
 import Login from './pages/Login'
+import Account from './pages/Account'
 import Admin from './pages/Admin'
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/receipt/:id" element={<Receipt />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/account" element={<Account />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

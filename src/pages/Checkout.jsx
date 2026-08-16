@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { IconChevronLeft, IconPhoto } from '@tabler/icons-react'
 import { useCart } from '../context/CartContext'
-import { createOrder, dbReady } from '../lib/supabase'
+import { createOrder, getPaymentMethods, dbReady } from '../lib/supabase'
 import { formatPrice } from '../lib/format'
 
 const empty = { customer_name: '', email: '', phone: '', address: '' }
@@ -22,8 +22,18 @@ export default function Checkout() {
   const [form, setForm] = useState(empty)
   const [errors, setErrors] = useState({})
   const [payment, setPayment] = useState('Cash on delivery')
+  const [methods, setMethods] = useState([])
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (!dbReady) return
+    getPaymentMethods().then((ms) => {
+      setMethods(ms)
+      const first = ms.find((m) => m.enabled && m.id !== 'card')
+      if (first) setPayment((p) => (ms.some((m) => m.enabled && m.label === p) ? p : first.label))
+    }).catch(() => {})
+  }, [])
 
   const set = (key) => (e) => {
     setForm((f) => ({ ...f, [key]: e.target.value }))
@@ -107,20 +117,25 @@ export default function Checkout() {
           </div>
 
           <h2 className="section-title" style={{ fontSize: 16 }}>Payment method</h2>
-          <label className={`pay-option ${payment === 'Cash on delivery' ? 'selected' : ''}`}>
-            <input type="radio" name="payment" checked={payment === 'Cash on delivery'} onChange={() => setPayment('Cash on delivery')} />
-            <span>
-              <strong>Cash on delivery</strong>
-              <span className="field-hint" style={{ display: 'block' }}>Pay when your order arrives.</span>
-            </span>
-          </label>
-          <label className="pay-option disabled">
-            <input type="radio" name="payment" disabled />
-            <span>
-              <strong>Card payment</strong>
-              <span className="field-hint" style={{ display: 'block' }}>Stripe integration coming soon.</span>
-            </span>
-          </label>
+          {methods.filter((m) => m.enabled && m.id !== 'card').map((m) => (
+            <label key={m.id} className={`pay-option ${payment === m.label ? 'selected' : ''}`}>
+              <input type="radio" name="payment" checked={payment === m.label} onChange={() => setPayment(m.label)} />
+              <span>
+                <strong>{m.label}</strong>
+                {m.id === 'cod' && <span className="field-hint" style={{ display: 'block' }}>Pay when your order arrives.</span>}
+                {m.id === 'bank_transfer' && <span className="field-hint" style={{ display: 'block' }}>We'll email you the transfer details.</span>}
+              </span>
+            </label>
+          ))}
+          {methods.some((m) => m.id === 'card' && m.enabled) && (
+            <label className="pay-option disabled">
+              <input type="radio" name="payment" disabled />
+              <span>
+                <strong>Card payment</strong>
+                <span className="field-hint" style={{ display: 'block' }}>Stripe integration coming soon.</span>
+              </span>
+            </label>
+          )}
 
           {error && <p className="alert alert-error">{error}</p>}
           <button className="btn btn-primary btn-block" disabled={placing}>

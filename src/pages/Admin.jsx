@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom'
 import {
   IconPencil, IconTrash, IconPlus, IconX, IconPhoto,
 } from '@tabler/icons-react'
-import { supabase, getProducts, getOrders, saveProduct, deleteProduct, uploadImages, importImage, dbReady } from '../lib/supabase'
+import { supabase, getProducts, getOrders, getProfiles, setAdmin, getPaymentMethods, updatePaymentMethod, updateOrderStatus, deleteOrder, saveProduct, deleteProduct, uploadImages, importImage, dbReady } from '../lib/supabase'
 import { formatPrice, shortId } from '../lib/format'
 
 const blank = { name: '', description: '', price: '', category: '', stock: '', featured: false }
@@ -15,6 +15,8 @@ export default function Admin() {
   const [tab, setTab] = useState('products')
   const [products, setProducts] = useState([])
   const [orders, setOrders] = useState([])
+  const [users, setUsers] = useState([])
+  const [methods, setMethods] = useState([])
   const [form, setForm] = useState(blank)
   const [editing, setEditing] = useState(null)
   const [files, setFiles] = useState([])
@@ -49,6 +51,8 @@ export default function Admin() {
       Promise.all([
         loadProducts(),
         getOrders().then(setOrders).catch((e) => setError(e.message)),
+        getProfiles().then(setUsers).catch((e) => setError(e.message)),
+        getPaymentMethods().then(setMethods).catch((e) => setError(e.message)),
       ]).finally(() => setLoading(false))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -135,6 +139,47 @@ export default function Admin() {
     }
   }
 
+  const toggleAdmin = async (u) => {
+    setError(null)
+    try {
+      await setAdmin(u.id, !u.is_admin)
+      setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, is_admin: !u.is_admin } : x)))
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const changeStatus = async (o, status) => {
+    setError(null)
+    try {
+      await updateOrderStatus(o.id, status)
+      setOrders((list) => list.map((x) => (x.id === o.id ? { ...x, status } : x)))
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const removeOrder = async (o) => {
+    if (!confirm(`Delete order #${shortId(o.id)}?`)) return
+    setError(null)
+    try {
+      await deleteOrder(o.id)
+      setOrders((list) => list.filter((x) => x.id !== o.id))
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const toggleMethod = async (m) => {
+    setError(null)
+    try {
+      await updatePaymentMethod(m.id, !m.enabled)
+      setMethods((list) => list.map((x) => (x.id === m.id ? { ...x, enabled: !m.enabled } : x)))
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   return (
     <div className="container">
       <div className="admin-head row spread">
@@ -148,6 +193,8 @@ export default function Admin() {
       <div className="tabs">
         <button className={`tab ${tab === 'products' ? 'active' : ''}`} onClick={() => setTab('products')}>Products</button>
         <button className={`tab ${tab === 'orders' ? 'active' : ''}`} onClick={() => setTab('orders')}>Orders ({orders.length})</button>
+        <button className={`tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>Users ({users.length})</button>
+        <button className={`tab ${tab === 'payments' ? 'active' : ''}`} onClick={() => setTab('payments')}>Payments</button>
       </div>
 
       {error && <p className="alert alert-error">{error}</p>}
@@ -253,7 +300,7 @@ export default function Admin() {
             )}
           </div>
         </div>
-      ) : (
+      ) : tab === 'orders' ? (
         <div style={{ paddingBottom: 40 }}>
           {loading ? (
             <p className="loading">
@@ -269,11 +316,16 @@ export default function Admin() {
                   <div>
                     <strong>Order #{shortId(o.id)}</strong>
                     <span className="muted" style={{ marginLeft: 10 }}>{new Date(o.created_at).toLocaleString()}</span>
-                    <span className="tag" style={{ marginLeft: 10 }}>{o.status}</span>
+                    <select className="input" aria-label="Order status" value={o.status} style={{ width: 'auto', fontSize: 13, padding: '4px 8px', marginLeft: 10 }} onChange={(e) => changeStatus(o, e.target.value)}>
+                      {['pending', 'shipped', 'delivered', 'cancelled'].map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="row" style={{ gap: 20 }}>
                     <span className="muted">{o.payment_method}</span>
                     <strong>{formatPrice(o.total)}</strong>
+                    <button className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => removeOrder(o)} aria-label={`Delete order ${shortId(o.id)}`}><IconTrash size={16} /></button>
                   </div>
                 </div>
                 <table className="receipt-items">
@@ -292,6 +344,84 @@ export default function Admin() {
                 </div>
               </div>
             ))
+          )}
+        </div>
+      ) : tab === 'users' ? (
+        <div style={{ paddingBottom: 40 }}>
+          {loading ? (
+            <p className="loading">
+              <span className="spinner" aria-hidden="true" />
+              Loading users…
+            </p>
+          ) : users.length === 0 ? (
+            <div className="card body-card">
+              <p className="muted" style={{ margin: 0 }}>
+                No user profiles found. Users created before the profile trigger are missing profiles — run in the SQL editor:
+                <code style={{ display: 'block', marginTop: 8, fontSize: 12 }}>insert into public.profiles (id, email) select id, email from auth.users on conflict (id) do nothing;</code>
+              </p>
+            </div>
+          ) : (
+            <div className="card body-card" style={{ padding: 0, overflow: 'hidden' }}>
+              <div className="table-scroll">
+                <table className="table">
+                  <thead>
+                    <tr><th>Email</th><th>Admin</th><th>Created</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u.id}>
+                        <td style={{ fontWeight: 500 }}>{u.email}</td>
+                        <td>{u.is_admin ? 'Yes' : 'No'}</td>
+                        <td>{new Date(u.created_at).toLocaleDateString()}</td>
+                        <td>
+                          <button
+                            className="btn"
+                            style={{ fontSize: 12, padding: '4px 10px' }}
+                            disabled={u.id === session.user.id}
+                            title={u.id === session.user.id ? "You can't demote yourself" : undefined}
+                            onClick={() => toggleAdmin(u)}
+                          >
+                            {u.is_admin ? 'Remove admin' : 'Make admin'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ paddingBottom: 40 }}>
+          {methods.length === 0 ? (
+            <div className="card body-card"><p className="muted" style={{ margin: 0 }}>No payment methods configured.</p></div>
+          ) : (
+            <div className="card body-card" style={{ padding: 0, overflow: 'hidden' }}>
+              <div className="table-scroll">
+                <table className="table">
+                  <thead>
+                    <tr><th>Method</th><th>Status</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {methods.map((m) => (
+                      <tr key={m.id}>
+                        <td style={{ fontWeight: 500 }}>{m.label}</td>
+                        <td>{m.enabled ? 'Enabled' : 'Disabled'}</td>
+                        <td>
+                          <button className="btn" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => toggleMethod(m)}>
+                            {m.enabled ? 'Disable' : 'Enable'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="muted" style={{ fontSize: 12, margin: '12px 16px 16px' }}>
+                Card payment stays disabled until a Stripe gateway is wired up. Checkout only shows enabled methods.
+              </p>
+            </div>
           )}
         </div>
       )}

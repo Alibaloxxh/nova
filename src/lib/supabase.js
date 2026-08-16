@@ -101,6 +101,17 @@ export async function getOrders() {
   return data ?? []
 }
 
+export async function getProfiles() {
+  const { data, error } = await supabase.from('profiles').select('id, email, is_admin, created_at').order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function setAdmin(id, isAdmin) {
+  const { error } = await supabase.from('profiles').update({ is_admin: isAdmin }).eq('id', id)
+  if (error) throw error
+}
+
 export async function getOrder(id, token) {
   const { data, error } = await supabase
     .from('orders')
@@ -109,4 +120,25 @@ export async function getOrder(id, token) {
     .single()
   if (error) throw error
   return data
+}
+
+export async function updateOrderStatus(id, status) {
+  const { error } = await supabase.from('orders').update({ status }).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteOrder(id) {
+  const { error } = await supabase.from('orders').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function getPaymentMethods() {
+  const { data, error } = await supabase.from('payment_methods').select('*').order('id')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function updatePaymentMethod(id, enabled) {
+  const { error } = await supabase.from('payment_methods').update({ enabled }).eq('id', id)
+  if (error) throw error
 }
