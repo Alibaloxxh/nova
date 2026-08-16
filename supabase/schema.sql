@@ -85,6 +85,18 @@ insert into public.payment_methods (id, label, enabled) values
   ('bank_transfer', 'Bank transfer', true)
 on conflict (id) do update set label = excluded.label;
 
+-- Admin check helper. SECURITY DEFINER so policy subqueries don't
+-- re-trigger profiles RLS (which caused "infinite recursion").
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and is_admin)
+$$;
+
 -- RLS
 alter table public.products enable row level security;
 alter table public.orders enable row level security;
@@ -96,15 +108,15 @@ alter table public.payment_methods enable row level security;
 create policy "products public read" on public.products for select using (true);
 create policy "products admin write" on public.products for all
   to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+  using (public.is_admin())
+  with check (public.is_admin());
 
 -- Orders: anyone may place an order (guest checkout), admin reads all,
 -- and the receipt page can read an order by presenting its token (x-receipt-token header)
 create policy "orders insert" on public.orders for insert with check (true);
 create policy "orders admin read" on public.orders for select
   to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+  using (public.is_admin());
 create policy "orders receipt read" on public.orders for select
   using (token::text = coalesce(current_setting('request.headers', true)::json ->> 'x-receipt-token', ''));
 
@@ -112,7 +124,7 @@ create policy "orders receipt read" on public.orders for select
 create policy "order_items insert" on public.order_items for insert with check (true);
 create policy "order_items admin read" on public.order_items for select
   to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+  using (public.is_admin());
 create policy "order_items receipt read" on public.order_items for select
   using (exists (
     select 1 from public.orders o
@@ -124,10 +136,10 @@ create policy "order_items receipt read" on public.order_items for select
 create policy "profiles own read" on public.profiles for select using (auth.uid() = id);
 create policy "profiles admin read" on public.profiles for select
   to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+  using (public.is_admin());
 create policy "profiles admin update" on public.profiles for update
   to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+  using (public.is_admin());
 
 -- Users can read their own orders, matched by account email (no migration needed)
 create policy "orders owner read" on public.orders for select
@@ -149,14 +161,14 @@ create policy "order_items owner read" on public.order_items for select
 create policy "payment methods public read" on public.payment_methods for select using (true);
 create policy "payment methods admin write" on public.payment_methods for all
   to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+  using (public.is_admin())
+  with check (public.is_admin());
 
 -- Admins can change order status and delete orders (items cascade)
 create policy "orders admin update" on public.orders for update
   to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+  using (public.is_admin())
+  with check (public.is_admin());
 create policy "orders admin delete" on public.orders for delete
   to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+  using (public.is_admin());

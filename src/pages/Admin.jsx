@@ -3,8 +3,9 @@ import { Navigate } from 'react-router-dom'
 import {
   IconPencil, IconTrash, IconPlus, IconX, IconPhoto,
 } from '@tabler/icons-react'
-import { supabase, getProducts, getOrders, getProfiles, setAdmin, getPaymentMethods, updatePaymentMethod, updateOrderStatus, deleteOrder, saveProduct, deleteProduct, uploadImages, importImage, dbReady } from '../lib/supabase'
+import { supabase, getProducts, getOrders, getPaymentMethods, updatePaymentMethod, updateOrderStatus, deleteOrder, saveProduct, deleteProduct, uploadImages, importImage, dbReady } from '../lib/supabase'
 import { formatPrice, shortId } from '../lib/format'
+import Users from './admin/Users'
 
 const blank = { name: '', description: '', price: '', category: '', stock: '', featured: false }
 
@@ -15,7 +16,6 @@ export default function Admin() {
   const [tab, setTab] = useState('products')
   const [products, setProducts] = useState([])
   const [orders, setOrders] = useState([])
-  const [users, setUsers] = useState([])
   const [methods, setMethods] = useState([])
   const [form, setForm] = useState(blank)
   const [editing, setEditing] = useState(null)
@@ -51,7 +51,6 @@ export default function Admin() {
       Promise.all([
         loadProducts(),
         getOrders().then(setOrders).catch((e) => setError(e.message)),
-        getProfiles().then(setUsers).catch((e) => setError(e.message)),
         getPaymentMethods().then(setMethods).catch((e) => setError(e.message)),
       ]).finally(() => setLoading(false))
     }
@@ -139,16 +138,6 @@ export default function Admin() {
     }
   }
 
-  const toggleAdmin = async (u) => {
-    setError(null)
-    try {
-      await setAdmin(u.id, !u.is_admin)
-      setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, is_admin: !u.is_admin } : x)))
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
   const changeStatus = async (o, status) => {
     setError(null)
     try {
@@ -193,7 +182,7 @@ export default function Admin() {
       <div className="tabs">
         <button className={`tab ${tab === 'products' ? 'active' : ''}`} onClick={() => setTab('products')}>Products</button>
         <button className={`tab ${tab === 'orders' ? 'active' : ''}`} onClick={() => setTab('orders')}>Orders ({orders.length})</button>
-        <button className={`tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>Users ({users.length})</button>
+        <button className={`tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>Users</button>
         <button className={`tab ${tab === 'payments' ? 'active' : ''}`} onClick={() => setTab('payments')}>Payments</button>
       </div>
 
@@ -347,51 +336,7 @@ export default function Admin() {
           )}
         </div>
       ) : tab === 'users' ? (
-        <div style={{ paddingBottom: 40 }}>
-          {loading ? (
-            <p className="loading">
-              <span className="spinner" aria-hidden="true" />
-              Loading users…
-            </p>
-          ) : users.length === 0 ? (
-            <div className="card body-card">
-              <p className="muted" style={{ margin: 0 }}>
-                No user profiles found. Users created before the profile trigger are missing profiles — run in the SQL editor:
-                <code style={{ display: 'block', marginTop: 8, fontSize: 12 }}>insert into public.profiles (id, email) select id, email from auth.users on conflict (id) do nothing;</code>
-              </p>
-            </div>
-          ) : (
-            <div className="card body-card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div className="table-scroll">
-                <table className="table">
-                  <thead>
-                    <tr><th>Email</th><th>Admin</th><th>Created</th><th></th></tr>
-                  </thead>
-                  <tbody>
-                    {users.map((u) => (
-                      <tr key={u.id}>
-                        <td style={{ fontWeight: 500 }}>{u.email}</td>
-                        <td>{u.is_admin ? 'Yes' : 'No'}</td>
-                        <td>{new Date(u.created_at).toLocaleDateString()}</td>
-                        <td>
-                          <button
-                            className="btn"
-                            style={{ fontSize: 12, padding: '4px 10px' }}
-                            disabled={u.id === session.user.id}
-                            title={u.id === session.user.id ? "You can't demote yourself" : undefined}
-                            onClick={() => toggleAdmin(u)}
-                          >
-                            {u.is_admin ? 'Remove admin' : 'Make admin'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
+        <Users currentId={session.user.id} />
       ) : (
         <div style={{ paddingBottom: 40 }}>
           {methods.length === 0 ? (

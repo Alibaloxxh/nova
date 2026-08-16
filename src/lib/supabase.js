@@ -101,10 +101,20 @@ export async function getOrders() {
   return data ?? []
 }
 
-export async function getProfiles() {
-  const { data, error } = await supabase.from('profiles').select('id, email, is_admin, created_at').order('created_at', { ascending: false })
+export async function getUsers({ search, status, role, joinedFrom, range } = {}) {
+  let q = supabase.from('profiles').select('*', { count: 'exact' }).order('created_at', { ascending: false })
+  if (search) q = q.ilike('email', `%${search}%`)
+  if (status === 'deleted') q = q.not('deleted_at', 'is', null)
+  else {
+    q = q.is('deleted_at', null)
+    if (status) q = q.eq('status', status)
+  }
+  if (role) q = q.eq('is_admin', role === 'admin')
+  if (joinedFrom) q = q.gte('created_at', new Date(joinedFrom).toISOString())
+  if (range) q = q.range(range[0], range[1])
+  const { data, error, count } = await q
   if (error) throw error
-  return data ?? []
+  return { users: data ?? [], count: count ?? 0 }
 }
 
 export async function setAdmin(id, isAdmin) {
