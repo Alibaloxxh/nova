@@ -3,9 +3,11 @@ import { Navigate } from 'react-router-dom'
 import {
   IconPencil, IconTrash, IconPlus, IconX, IconPhoto,
 } from '@tabler/icons-react'
-import { supabase, getProducts, getOrders, getPaymentMethods, updatePaymentMethod, updateOrderStatus, deleteOrder, saveProduct, deleteProduct, uploadImages, importImage, dbReady } from '../lib/supabase'
+import { supabase, getProducts, getPaymentMethods, updatePaymentMethod, saveProduct, deleteProduct, uploadImages, importImage, dbReady } from '../lib/supabase'
 import { formatPrice, shortId } from '../lib/format'
 import Users from './admin/Users'
+import Orders from './admin/Orders'
+import Finance from './admin/Finance'
 
 const blank = { name: '', description: '', price: '', category: '', stock: '', featured: false }
 
@@ -15,7 +17,6 @@ export default function Admin() {
   const [checking, setChecking] = useState(true)
   const [tab, setTab] = useState('products')
   const [products, setProducts] = useState([])
-  const [orders, setOrders] = useState([])
   const [methods, setMethods] = useState([])
   const [form, setForm] = useState(blank)
   const [editing, setEditing] = useState(null)
@@ -50,7 +51,6 @@ export default function Admin() {
       setLoading(true)
       Promise.all([
         loadProducts(),
-        getOrders().then(setOrders).catch((e) => setError(e.message)),
         getPaymentMethods().then(setMethods).catch((e) => setError(e.message)),
       ]).finally(() => setLoading(false))
     }
@@ -138,27 +138,6 @@ export default function Admin() {
     }
   }
 
-  const changeStatus = async (o, status) => {
-    setError(null)
-    try {
-      await updateOrderStatus(o.id, status)
-      setOrders((list) => list.map((x) => (x.id === o.id ? { ...x, status } : x)))
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  const removeOrder = async (o) => {
-    if (!confirm(`Delete order #${shortId(o.id)}?`)) return
-    setError(null)
-    try {
-      await deleteOrder(o.id)
-      setOrders((list) => list.filter((x) => x.id !== o.id))
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
   const toggleMethod = async (m) => {
     setError(null)
     try {
@@ -181,8 +160,9 @@ export default function Admin() {
 
       <div className="tabs">
         <button className={`tab ${tab === 'products' ? 'active' : ''}`} onClick={() => setTab('products')}>Products</button>
-        <button className={`tab ${tab === 'orders' ? 'active' : ''}`} onClick={() => setTab('orders')}>Orders ({orders.length})</button>
+        <button className={`tab ${tab === 'orders' ? 'active' : ''}`} onClick={() => setTab('orders')}>Orders</button>
         <button className={`tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>Users</button>
+        <button className={`tab ${tab === 'finance' ? 'active' : ''}`} onClick={() => setTab('finance')}>Finance</button>
         <button className={`tab ${tab === 'payments' ? 'active' : ''}`} onClick={() => setTab('payments')}>Payments</button>
       </div>
 
@@ -290,53 +270,11 @@ export default function Admin() {
           </div>
         </div>
       ) : tab === 'orders' ? (
-        <div style={{ paddingBottom: 40 }}>
-          {loading ? (
-            <p className="loading">
-              <span className="spinner" aria-hidden="true" />
-              Loading orders…
-            </p>
-          ) : orders.length === 0 ? (
-            <div className="card body-card"><p className="muted" style={{ margin: 0 }}>No orders yet.</p></div>
-          ) : (
-            orders.map((o) => (
-              <div className="card body-card" key={o.id} style={{ marginBottom: 16 }}>
-                <div className="row spread wrap">
-                  <div>
-                    <strong>Order #{shortId(o.id)}</strong>
-                    <span className="muted" style={{ marginLeft: 10 }}>{new Date(o.created_at).toLocaleString()}</span>
-                    <select className="input" aria-label="Order status" value={o.status} style={{ width: 'auto', fontSize: 13, padding: '4px 8px', marginLeft: 10 }} onChange={(e) => changeStatus(o, e.target.value)}>
-                      {['pending', 'shipped', 'delivered', 'cancelled'].map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="row" style={{ gap: 20 }}>
-                    <span className="muted">{o.payment_method}</span>
-                    <strong>{formatPrice(o.total)}</strong>
-                    <button className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => removeOrder(o)} aria-label={`Delete order ${shortId(o.id)}`}><IconTrash size={16} /></button>
-                  </div>
-                </div>
-                <table className="receipt-items">
-                  <tbody>
-                    {(o.order_items ?? []).map((i) => (
-                      <tr key={i.id}>
-                        <td>{i.name}</td>
-                        <td className="num">×{i.quantity}</td>
-                        <td className="num">{formatPrice(i.quantity * i.price)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  {o.customer_name} · {o.email} · {o.phone} · {o.address}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        <Orders />
       ) : tab === 'users' ? (
         <Users currentId={session.user.id} />
+      ) : tab === 'finance' ? (
+        <Finance />
       ) : (
         <div style={{ paddingBottom: 40 }}>
           {methods.length === 0 ? (

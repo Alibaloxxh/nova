@@ -92,15 +92,6 @@ export async function createOrder(order, items) {
   return { id, token }
 }
 
-export async function getOrders() {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('*, order_items(*)')
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return data ?? []
-}
-
 export async function getUsers({ search, status, role, joinedFrom, range } = {}) {
   let q = supabase.from('profiles').select('*', { count: 'exact' }).order('created_at', { ascending: false })
   if (search) q = q.ilike('email', `%${search}%`)
@@ -132,8 +123,58 @@ export async function getOrder(id, token) {
   return data
 }
 
-export async function updateOrderStatus(id, status) {
-  const { error } = await supabase.from('orders').update({ status }).eq('id', id)
+export async function getOrdersAdmin({ status, from, to, email, minAmount, maxAmount, range } = {}) {
+  let q = supabase.from('orders').select('*, order_items(*)', { count: 'exact' }).order('created_at', { ascending: false })
+  if (status) q = q.eq('status', status)
+  if (from) q = q.gte('created_at', new Date(from).toISOString())
+  if (to) q = q.lte('created_at', new Date(`${to}T23:59:59`).toISOString())
+  if (email) q = q.ilike('email', `%${email}%`)
+  if (minAmount) q = q.gte('total', minAmount)
+  if (maxAmount) q = q.lte('total', maxAmount)
+  if (range) q = q.range(range[0], range[1])
+  const { data, error, count } = await q
+  if (error) throw error
+  return { orders: data ?? [], count: count ?? 0 }
+}
+
+export async function updateOrderStatusAdmin(id, status) {
+  const { error } = await supabase.rpc('admin_update_order_status', { p_order_id: id, p_status: status })
+  if (error) throw error
+}
+
+export async function recordRefund(id, amount, note) {
+  const { error } = await supabase.rpc('admin_record_refund', { p_order_id: id, p_amount: amount, p_note: note ?? null })
+  if (error) throw error
+}
+
+export async function getOrderStatusLog(id) {
+  const { data, error } = await supabase
+    .from('order_status_log')
+    .select('*, profiles(email)')
+    .eq('order_id', id)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getOrderTransactions(id) {
+  const { data, error } = await supabase.from('transactions').select('*').eq('order_id', id).order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getTransactions({ from, to, type } = {}) {
+  let q = supabase.from('transactions').select('*, orders(id, customer_name)').order('created_at', { ascending: false })
+  if (from) q = q.gte('created_at', new Date(from).toISOString())
+  if (to) q = q.lte('created_at', new Date(`${to}T23:59:59`).toISOString())
+  if (type) q = q.eq('type', type)
+  const { data, error } = await q
+  if (error) throw error
+  return data ?? []
+}
+
+export async function recordPayout(id, amount, note) {
+  const { error } = await supabase.rpc('admin_record_payout', { p_order_id: id, p_amount: amount, p_note: note ?? null })
   if (error) throw error
 }
 
